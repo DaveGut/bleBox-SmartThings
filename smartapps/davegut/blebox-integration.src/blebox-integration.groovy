@@ -12,7 +12,7 @@ and limitations under the License.
 Usage: Use this code freely without reference to origination.
 ===== History =====
 aa============================================================================================*/
-def appVersion() { return "1.0.01" }
+def appVersion() { return "1.0.02" }
 import groovy.json.JsonSlurper
 definition(
 	name: "bleBox Integration",
