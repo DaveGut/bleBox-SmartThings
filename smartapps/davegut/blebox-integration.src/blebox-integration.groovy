@@ -12,7 +12,7 @@ and limitations under the License.
 Usage: Use this code freely without reference to origination.
 ===== History =====
 aa============================================================================================*/
-def appVersion() { return "1.0.02" }
+def appVersion() { return "1.0.03" }
 import groovy.json.JsonSlurper
 definition(
 	name: "bleBox Integration",
@@ -125,10 +125,10 @@ def addDevicesPage() {
 }
 def parseDeviceData(response) {
 	def cmdResponse = parseResponse(response)
-//	added cmdResponse.device check for exit.
-	if (cmdResponse == "error" || !cmdResponse.device) { return }
+	if (cmdResponse == "error") { return }
 	logDebug("parseDeviceData: ${convertHexToIP(response.ip)} // ${cmdResponse}")
 	if (cmdResponse.device) { cmdResponse = cmdResponse.device }
+    else { return }		//	Handle case where a error message is returned by the device.
 	def label = cmdResponse.deviceName
 	def dni = cmdResponse.id
 	def type = cmdResponse.type
@@ -156,7 +156,7 @@ def parseDeviceData(response) {
 	} else if (type == "shutterBox") {
     	sendGetCmd(ip, """/api/settings/state""", "parseShutterData")
     } else if (type == "dimmerBox") {
-		setGetCmd(it.value.ip, "/api/dimmer/state", "parseDimmerData")
+		setGetCmd(ip, "/api/dimmer/state", "parseDimmerData")
 	}
 }
 def parseRelayData(response) {
