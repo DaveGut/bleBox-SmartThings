@@ -97,7 +97,7 @@ def addDevicesPage() {
     	state.addDevicesStarted = true
     	message = "Looking for bleBox Devices.  This will take several minutes."
 		state.devices = [:]
-		findDevices(200, "parseDeviceData")
+		findDevices(250, "parseDeviceData")
     }
     def devices = state.devices
 	def newDevices = [:]
@@ -125,7 +125,8 @@ def addDevicesPage() {
 }
 def parseDeviceData(response) {
 	def cmdResponse = parseResponse(response)
-	if (cmdResponse == "error") { return }
+//	added cmdResponse.device check for exit.
+	if (cmdResponse == "error" || !cmdResponse.device) { return }
 	logDebug("parseDeviceData: ${convertHexToIP(response.ip)} // ${cmdResponse}")
 	if (cmdResponse.device) { cmdResponse = cmdResponse.device }
 	def label = cmdResponse.deviceName
@@ -155,7 +156,7 @@ def parseDeviceData(response) {
 	} else if (type == "shutterBox") {
     	sendGetCmd(ip, """/api/settings/state""", "parseShutterData")
     } else if (type == "dimmerBox") {
-		setGetCmd(it.vvalue.ip, "/api/dimmer/state", "parseDimmerData")
+		setGetCmd(it.value.ip, "/api/dimmer/state", "parseDimmerData")
 	}
 }
 def parseRelayData(response) {
@@ -379,8 +380,14 @@ def parseResponse(response) {
 		logWarn("parseInput: ${convertHexToIP(response.ip)} // no data in command response.")
 		cmdResponse = "error"
 	} else {
+//	Added try to catch potential parsing error
 		def jsonSlurper = new groovy.json.JsonSlurper()
-		cmdResponse = jsonSlurper.parseText(response.body)
+        try {
+        	cmdResponse = jsonSlurper.parseText(response.body)
+        } catch (error) {
+        	cmdResponse = "error"
+        	logWarn("parseInput: error parsing body = ${response.body}")
+        }
 	}
 	return cmdResponse
 }
