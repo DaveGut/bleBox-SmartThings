@@ -69,7 +69,7 @@ def mainPage() {
 			href "listDevicesPage",
 					title: "List all available bleBox devices",
 					description: "Lists available devices.\n" +
-								 "(It will take a minute for the next page to load.)"
+								 "(It will take several minutes for the next page to load.)"
 			input ("infoLog", "bool",
 				   required: false,
 				   submitOnChange: true,
@@ -95,9 +95,9 @@ def addDevicesPage() {
     def message = "The devices in the dropdown below are available."
     if (state.addDevicesStarted == false) {
     	state.addDevicesStarted = true
-    	message = "Looking for bleBox Devices.  This will take about 1 minute."
+    	message = "Looking for bleBox Devices.  This will take several minutes."
 		state.devices = [:]
-		findDevices(100, "parseDeviceData")
+		findDevices(200, "parseDeviceData")
     }
     def devices = state.devices
 	def newDevices = [:]
@@ -110,7 +110,7 @@ def addDevicesPage() {
 	logDebug("addDevicesPage: newDevices = ${newDevices}")
 	return dynamicPage(name:"addDevicesPage",
 		title:"Add bleBox Devices to Hubitat",
-		refreshInterval: 30, 
+		refreshInterval: 15, 
 		install: true) {
 	 	section() {
         	paragraph message
@@ -133,14 +133,10 @@ def parseDeviceData(response) {
 	def type = cmdResponse.type
 	def ip = convertHexToIP(response.ip)
 	def typeData
-	if (type == "dimmerBox") {
-		if (cmdResponse.dimmer.loadType == 2) { type ="${type} NoDim" }
-	} else if (type == "gateBox") {
+	if (type == "gateBox") {
 		if (cmdResponse.hv.length() > 7) {
 			if (cmdResponse.hv.substring(0,7) == "doorBox") { type = "doorBox" }
 		}
-	} else if (type == "wLightBox") {
-		type = "${type} RGBW"
 	}
 	def devData = [:]
 	devData["dni"] = dni.toUpperCase()
@@ -152,13 +148,15 @@ def parseDeviceData(response) {
 	if (isChild) {
 		isChild.updateDataValue("deviceIP", ip)
 	}
-    if (type == "switchBoxD") {
+	if (type == "switchBoxD") {
 		sendGetCmd(ip, """/api/relay/state""", "parseRelayData")
-	} else if (type == "wLightBox RGBW") {
+	} else if (type == "wLightBox") {
 		sendGetCmd(ip, """/api/rgbw/state""", "parseRgbwData")
 	} else if (type == "shutterBox") {
     	sendGetCmd(ip, """/api/settings/state""", "parseShutterData")
-    }
+    } else if (type == "dimmerBox") {
+		setGetCmd(it.vvalue.ip, "/api/dimmer/state", "parseDimmerData")
+	}
 }
 def parseRelayData(response) {
 	def cmdResponse = parseResponse(response)
@@ -180,11 +178,11 @@ def parseRgbwData(response) {
 	def cmdResponse = parseResponse(response)
 	if (cmdResponse == "error") { return }
 	logDebug("parseRgbwData: ${convertHexToIP(response.ip)} // ${cmdResponse}")
-	if (cmdResponse.rgbw.colorMode == 3) {
-		def devIp = convertHexToIP(response.ip)
-		def device = state.devices.find {it.value.ip == devIp }
-		device.value << [type: "wLightBox Mono"]
-	}
+    def type = "wLightBox RGBW"
+	if (cmdResponse.rgbw.colorMode == 3) { type = "wLightBox Mono" }
+	def devIp = convertHexToIP(response.ip)
+	def device = state.devices.find {it.value.ip == devIp }
+	device.value << [type: type]
 }
 def parseShutterData(response) {
 	def cmdResponse = parseResponse(response)
@@ -195,6 +193,16 @@ def parseShutterData(response) {
 		def devIp = convertHexToIP(response.ip)
 		def device = state.devices.find {it.value.ip == devIp }
 		device.value << [type: "shutterBox Tilt"]
+	}
+}
+def parseDimmerData(response) {
+	def cmdResponse = parseResponse(response)
+	logDebug("parseDimmerData: ${convertHexToIP(response.ip)} // ${cmdResponse}")
+	if (cmdResponse == "error") { return }
+	if (cmdResponse.dimmer.loadType == 1) {
+		def devIp = convertHexToIP(response.ip)
+		def device = state.devices.find {it.value.ip == devIp }
+		device.value << [type: "dimmerBox NoDim"]
 	}
 }
 def addDevices() {
@@ -243,7 +251,7 @@ def listDevicesPage() {
     	state.listDevicesStarted = true
     	message = "Looking for bleBox Devices.  This will take about 1 minute."
 		state.deviceIps = [:]
-		findDevices(100, "parseIpData")
+		findDevices(200, "parseIpData")
     }
 	def deviceIps = state.deviceIps
 	def foundDevices = "Found Devices (Installed / DNI / IP / Alias):"
