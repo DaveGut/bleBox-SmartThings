@@ -11,8 +11,8 @@ and limitations under the License.
 
 Usage: Use this code freely without reference to origination.
 ===== History =====
-aa============================================================================================*/
-def appVersion() { return "1.0.03" }
+============================================================================================*/
+def appVersion() { return "1.0.04" }
 import groovy.json.JsonSlurper
 definition(
 	name: "bleBox Integration",
@@ -128,7 +128,6 @@ def parseDeviceData(response) {
 	if (cmdResponse == "error") { return }
 	logDebug("parseDeviceData: ${convertHexToIP(response.ip)} // ${cmdResponse}")
 	if (cmdResponse.device) { cmdResponse = cmdResponse.device }
-    else { return }		//	Handle case where a error message is returned by the device.
 	def label = cmdResponse.deviceName
 	def dni = cmdResponse.id
 	def type = cmdResponse.type
@@ -156,7 +155,7 @@ def parseDeviceData(response) {
 	} else if (type == "shutterBox") {
     	sendGetCmd(ip, """/api/settings/state""", "parseShutterData")
     } else if (type == "dimmerBox") {
-		setGetCmd(ip, "/api/dimmer/state", "parseDimmerData")
+		sendGetCmd(ip, "/api/dimmer/state", "parseDimmerData")
 	}
 }
 def parseRelayData(response) {
@@ -211,7 +210,7 @@ def addDevices() {
 	def hub
 	try { hub = location.hubs[0] }
 	catch (error) { 
-		logWarn("Hub not detected.  You must have a hub to install this app.")
+		logWarn("Hub not detected.  You must have a hub to install devices.")
 		return
 	}
 	def hubId = hub.id
@@ -250,9 +249,9 @@ def listDevicesPage() {
     def message = "Found the following bleBox Devices:"
     if (state.listDevicesStarted == false) {
     	state.listDevicesStarted = true
-    	message = "Looking for bleBox Devices.  This will take about 1 minute."
+    	message = "Looking for bleBox Devices.  This will take several minutes."
 		state.deviceIps = [:]
-		findDevices(200, "parseIpData")
+		findDevices(250, "parseIpData")
     }
 	def deviceIps = state.deviceIps
 	def foundDevices = "Found Devices (Installed / DNI / IP / Alias):"
@@ -307,27 +306,31 @@ def addIpData(dni, ip, label) {
 //	===== Recurring IP Check =====
 def updateDevices() {
 	logDebug("UpdateDevices: ${state.devices}")
+	state.missingDevice = false
 	def devices = state.deviceIps
 	if (deviceIps == [:]) {
 		findDevices(1000, parseIpData)
 		return
-	}
-	devices.each {
-		if (state.missingDevice == true) { return }
-		def deviceIP = it.value.ip
-		runIn(2, setMissing)
-		sendGetCmd(deviceIP, "/api/device/state", checkValid)
+	} else {
+		devices.each {
+			def deviceIP = it.value.ip
+			runIn(2, setMissing)
+			sendGetCmd(deviceIP, "/api/device/state", checkValid)
+			pauseExecution(2100)
+		}
 	}
 	if (state.missingDevice == true) {
 		state.deviceIps= [:]
-		findDevices(500, parseIpData)
+		findDevices(1000, parseIpData)
 		state.missingDevices == false
 	}
 }
 def checkValid() {
 	def cmdResponse = parseResponse(response)
-	if (cmdResponse == "commsError") { return }
-	logDebug("parseIpData: ${cmdResponse}")
+	if (cmdResponse == "error") { return }
+	logDebug("parseIpData: ${convertHexToIP(response.ip)} // ${cmdResponse}")
+	if (cmdResponse.device) { cmdResponse = cmdResponse.device }
+    else { return }		//	Handle case where a error message is returned by the device.
 	unschedule("setMissing")
 }
 def setMissing() { state.missingDevice = true }
@@ -337,9 +340,8 @@ def setMissing() { state.missingDevice = true }
 def findDevices(pollInterval, action) {
 	logDebug("findDevices: ${pollInterval} / ${action}")
 	def hub
-	try { hub = location.hubs[0] }
-	catch (error) { 
-		logWarn "Hub not detected.  You must have a hub to install this app."
+	try { hub = location.hubs[0] } catch (error) { 
+		logWarn "Hub not detected.  You must have a hub to install these devices."
 		return
 	}
 	def hubIpArray = hub.localIP.split('\\.')
@@ -391,7 +393,6 @@ def parseResponse(response) {
 	}
 	return cmdResponse
 }
-
 
 
 //	=====	Utility methods	=====
