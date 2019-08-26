@@ -16,7 +16,7 @@ open API documentation for development and is intended for integration into Smar
 08.22.19	1.0.02	Initial release.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.0.01" }
+def driverVer() { return "1.0.03" }
 metadata {
 	definition (name: "bleBox dimmerBox",
 				namespace: "davegut",
@@ -150,7 +150,7 @@ def ping() {
 }
 def refresh() {
 	logDebug("refresh")
-	sendCommand("/api/dimmer/state", "commandParse")
+	sendGetCmd("/api/dimmer/state", "commandParse")
 }
 def commandParse(response) {
 	if(response.status != 200 || response.body == null) {
@@ -162,6 +162,7 @@ def commandParse(response) {
 	logDebug("commandParse: response = ${cmdResponse}")
 
 	def level = cmdResponse.dimmer.desiredBrightness
+    level = (0.5 + level/2.55).toInteger()
 	def onOff = "off"
 	if (level > 0) { onOff = "on" }
 	sendEvent(name: "switch", value: onOff)
