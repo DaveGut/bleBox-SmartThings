@@ -164,7 +164,7 @@ def commandParse(response) {
 	def level = cmdResponse.dimmer.desiredBrightness
 	def onOff = "off"
 	if (level > 0) { onOff = "on" }
-	sendEvent(name: "switch", value: "onOff")
+	sendEvent(name: "switch", value: onOff)
 	sendEvent(name: "level", value: level)
 	logInfo "commandParse: switch = ${onOff}, level = ${level}"
 	if (state.pollInterval != "0") {
