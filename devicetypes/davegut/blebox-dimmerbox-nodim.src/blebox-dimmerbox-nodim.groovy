@@ -135,7 +135,7 @@ def ping() {
 }
 def refresh() {
 	logDebug("refresh")
-	sendCommand("/api/dimmer/state", "commandParse")
+	sendGetCmd("/api/dimmer/state", "commandParse")
 }
 def quickPoll() { sendGetCmd("/api/dimmer/state", "commandParse") }
 def commandParse(response) {
@@ -149,8 +149,8 @@ def commandParse(response) {
 	logDebug("commandParse: response = ${cmdResponse}")
 	def onOff = "off"
 	if (cmdResponse.dimmer.desiredBrightness > 0) { onOff = "on" }
-	sendEvent(name: "switch", value: "onOff")
-	logInfo "commandParse: switch = ${onOff}."
+	sendEvent(name: "switch", value: onOff)
+	logInfo("commandParse: switch = ${onOff}.")
 	if (state.pollInterval != "0") {
 		runIn(state.pollInterval.toInteger(), quickPoll)
 	}
