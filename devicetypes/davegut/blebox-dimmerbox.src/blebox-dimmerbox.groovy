@@ -13,7 +13,7 @@ DISCLAIMER: The author of this integration is not associated with blebox.  This 
 open API documentation for development and is intended for integration into SmartThings.
 
 ===== Hiatory =====
-08.22.19	1.0.01	Initial release.
+08.22.19	1.0.02	Initial release.
 */
 //	===== Definitions, Installation and Updates =====
 def driverVer() { return "1.0.01" }
@@ -113,10 +113,10 @@ def setLevel(level, transitionTime = null) {
 	def fadeSpeed = state.defFadeSpeed
 	if (transitionTime != null) { fadeSpeed = getFadeSpeed(transitionTime) }
 	logDebug("setLevel: level = ${level} // ${fadeSpeed}")
-	level255 = (2.55 * level + 0.5).toInteger()
-	state.savedLevel = level255
+	level = (2.55 * level + 0.5).toInteger()
+	state.savedLevel = level
 	sendPostCmd("/api/dimmer/set",
-				"""{"dimmer":{"desiredBrightness":${level255},"fadeSpeed":${fadeSpeed}}}""",
+				"""{"dimmer":{"desiredBrightness":${level},"fadeSpeed":${fadeSpeed}}}""",
 				"commandParse")
 }
 def getFadeSpeed(transitionTime) {
