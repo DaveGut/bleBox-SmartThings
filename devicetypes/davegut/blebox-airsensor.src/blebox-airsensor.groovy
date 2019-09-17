@@ -31,54 +31,45 @@ metadata {
 		attribute "PM_10_Measurement", "string"
 		attribute "PM_10_Trend", "string"
 		attribute "pm10Quality", "number"
-		attribute "airQualityLabel", "string"
+		attribute "airQualityLevel", "string"
+        attribute "measurementTime", "string"
  		command "kick"
         command "refresh"
 		attribute "kickActive", "boolean"
         capability "Health Check"
 	}
 
+	def pm10Label = '${currentValue("PM_10_Measurement")}\n${currentValue("pm10Quality")}'
 	tiles(scale: 2) {
-	   	multiAttributeTile(name:"airQuality", type:"device.airQuality", width:6, height:4, canChangeIcon: true) {
-    		tileAttribute("device.airQuality", key: "PRIMARY_CONTROL") {
-	            attributeState("default", label:'CAQI: ${currentValue}', backgroundColors:[
-	                [value: 25, color: "#4c9900"],
-	                [value: 50, color: "#b2ff66"],
-	                [value: 75, color: "#ffcc99"],
-	                [value: 100, color: "#ff8000"],
-	                [value: 101, color: "#bc2323"]
-                ])
-            }
-            tileAttribute("device.airQualityLabel", key: "SECONDARY_CONTROL") {
-	            attributeState("default", label: '${currentValue}')
-           }
-        }
-		valueTile("Measurement", "default", width: 2, height: 1) {
-			state "default", label: 'Value'
+	   	multiAttributeTile(name:"airQuality", type:"device.airQualityLevel", width:6, height:4, canChangeIcon: true) {
+    		tileAttribute("device.airQualityLevel", key: "PRIMARY_CONTROL") {
+	            attributeState("Very Low", label: '${currentValue}', backgroundColor: "#085CFF")
+	            attributeState("Low", label: '${currentValue}', backgroundColor: "#03FFA4")
+	            attributeState("Moderate", label: '${currentValue}', backgroundColor: "#ACB000")
+	            attributeState("High", label: '${currentValue}', backgroundColor: "#FF9A03")
+	            attributeState("Very High", label: '${currentValue}', backgroundColor: "#FF1203")
+           	}
+			tileAttribute ("device.measurementTime", key: "SECONDARY_CONTROL") {
+				attributeState "default", label: '${currentValue}'
+			}
+       	}
+		valueTile("PM1", "default", width: 2, height: 1) {
+			state "default", label: 'PM 1'
 		}
-		valueTile("Quality", "default", width: 2, height: 1) {
-			state "default", label: 'Quality'
+		valueTile("PM25", "default", width: 2, height: 1) {
+			state "default", label: 'PM 2.5'
 		}
-		valueTile("Trend", "default", width: 1, height: 1) {
-			state "default", label: 'Trend'
-		}
-		valueTile("PM1", "default", width: 1, height: 1) {
-			state "default", label: 'PM 1:'
-		}
-		valueTile("PM25", "default", width: 1, height: 1) {
-			state "default", label: 'PM 2.5:'
-		}
-		valueTile("PM10", "default", width: 1, height: 1) {
-			state "default", label: 'PM 10:'
+		valueTile("PM10", "default", width: 2, height: 1) {
+			state "default", label: 'PM 10'
 		}
 		valueTile("PM1Value", "device.PM_1_Measurement", width: 2, height: 1, decoration: "flat") {
-			state "default", label: '${currentValue}μg/m3'
+			state "default", label: '${currentValue} µg/m³'
 		}
 		valueTile("PM25Value", "device.PM_2_5_Measurement", width: 2, height: 1, decoration: "flat") {
-			state "default", label: '${currentValue}μg/m3'
+			state "default", label: '${currentValue} µg/m³'
 		}
 		valueTile("PM10Value", "device.PM_10_Measurement", width: 2, height: 1, decoration: "flat") {
-			state "default", label: '${currentValue}μg/m3'
+			state "default", label: '${currentValue} µg/m³'
 		}
  		valueTile("PM25Quality", "device.pm2_5Quality", width: 2, height: 1, decoration: "flat") {
 			state "default", label: '${currentValue}'
@@ -86,13 +77,16 @@ metadata {
  		valueTile("PM10Quality", "device.pm10Quality", width: 2, height: 1, decoration: "flat") {
 			state "default", label: '${currentValue}'
 		}
- 		valueTile("PM1Trend", "device.PM_1_Trend", width: 1, height: 1, decoration: "flat") {
+ 		valueTile("CAQI", "device.airQuality", width: 4, height: 1, decoration: "flat") {
+			state "default", label: 'CAQI: ${currentValue}'
+		}
+ 		valueTile("PM1Trend", "device.PM_1_Trend", width: 2, height: 1, decoration: "flat") {
 			state "default", label: '${currentValue}'
 		}
- 		valueTile("PM25Trend", "device.PM_2_5_Trend", width: 1, height: 1, decoration: "flat") {
+ 		valueTile("PM25Trend", "device.PM_2_5_Trend", width: 2, height: 1, decoration: "flat") {
 			state "default", label: '${currentValue}'
 		}
- 		valueTile("PM10Trend", "device.PM_10_Trend", width: 1, height: 1, decoration: "flat") {
+ 		valueTile("PM10Trend", "device.PM_10_Trend", width: 2, height: 1, decoration: "flat") {
 			state "default", label: '${currentValue}'
 		}
 		standardTile("refresh", "default", width: 2, height: 1, decoration: "flat") {
@@ -109,11 +103,11 @@ metadata {
 		}
         main(["airQuality"])
         details(["airQuality",
-        		 "1x1", "Measurement", "Quality", "Trend",
-        		 "PM1", "PM1Value", "2x1", "PM1Trend",
-        		 "PM25", "PM25Value", "PM25Quality", "PM25Trend",
-        		 "PM10", "PM10Value", "PM10Quality", "PM10Trend",
-                 "4x1", "refresh"])
+        		 "PM1", "PM25", "PM10", 
+                 "PM1Value", "PM25Value", "PM10Value", 
+                 "2x1", "PM25Quality", "PM10Quality", 
+                 "PM1Trend", "PM25Trend", "PM10Trend",
+                 "CAQI", "refresh"])
     }
 	preferences {
 		input ("device_IP", "text", title: "Manual Install Device IP")
@@ -203,9 +197,9 @@ def commandParse(response) {
     def pm10Value = pm10Data.value.toInteger()
     def pm10Trend = getTrendText(pm10Data.trend)
 //	===== SIMULATION DATA TO CHECK ALGORITHM =====
-//	pm1Value = 50
-//	pm25Value = 60
-//	pm10Value = 179
+//	pm1Value = 10
+//	pm25Value = 80
+//	pm10Value = 210
 
 //	Create Air Quality Index using EU standard for measurement. Reference:
 //	"http://www.airqualitynow.eu/about_indices_definition.php", utilizing the 
@@ -228,26 +222,27 @@ def commandParse(response) {
     }
 
 	def airQuality = Math.max(pm25Quality, pm10Quality)
-    def airQualityLabel
+    def airQualityLevel
     switch(airQuality) {
-    	case 0..25: airQualityLabel = "Very Low" ; break
-        case 26..50: airQualityLabel = "Low" ; break
-        case 51..75: airQualityLevel = "Medium" ; break
-        case 75..100: airQualityLabel = "High" ; break
-        default: airQualityLabel = "Very High"
+    	case 0..25: airQualityLevel = "Very Low" ; break
+        case 26..50: airQualityLevel = "Low" ; break
+        case 51..75: airQualityLevel = "Moderate" ; break
+        case 75..100: airQualityLevel = "High" ; break
+        default: airQualityLevel = "Very High"
     }
 
-	sendEvent(name: "PM_1_Measurement", value: pm1Value, unit: "micro-g/m3")
+	sendEvent(name: "PM_1_Measurement", value: pm1Value, unit: 'µg/m³')
 	sendEvent(name: "PM_1_Trend", value: pm1Trend)
-	sendEvent(name: "PM_2_5_Measurement", value: pm25Value, unit: "micro-g/m3")
+	sendEvent(name: "PM_2_5_Measurement", value: pm25Value, unit: 'µg/m³')
 	sendEvent(name: "PM_2_5_Trend", value: pm25Trend)
     sendEvent(name: "pm2_5Quality", value: pm25Quality)
-	sendEvent(name: "PM_10_Measurement", value: pm10Value, unit: "micro-g/m3")
+	sendEvent(name: "PM_10_Measurement", value: pm10Value, unit: 'µg/m³')
 	sendEvent(name: "PM_10_Trend", value: pm10Trend)
     sendEvent(name: "pm10Quality", value: pm10Quality)
-//   	sendEvent(name: "airQuality", value: airQuality, unit: "CAQI")
-   	sendEvent(name: "airQuality", value: airQuality)
-    sendEvent(name: "airQualityLabel", value: airQualityLabel)
+   	sendEvent(name: "airQuality", value: airQuality, unit: "CAQI")
+    sendEvent(name: "airQualityLevel", value: airQualityLevel)
+	def now = new Date(now()).format("h:mm:ss a '\non' M/d/yyyy", location.timeZone).toLowerCase()
+    sendEvent(name: "measurementTime", value: now)
 	logInfo("commandParse: Air Quality Data, Index and Category Updated")
 }
 def getTrendText(trend) {
