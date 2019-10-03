@@ -17,6 +17,18 @@ open API documentation for development and is intended for integration into the 
 */
 //	===== Definitions, Installation and Updates =====
 def driverVer() { return "1.0.01" }
+
+
+
+
+
+
+
+
+
+
+
+//	Add label to display for measurement in process
 metadata {
 	definition (name: "bleBox airSensor",
 				namespace: "davegut",
@@ -33,9 +45,9 @@ metadata {
 		attribute "pm10Quality", "number"
 		attribute "airQualityLevel", "string"
         attribute "measurementTime", "string"
- 		command "kick"
-        command "refresh"
-		attribute "kickActive", "boolean"
+ 		command "forceMeasurement"
+		attribute "updatingData", "boolean"
+        capability "Refresh"
         capability "Health Check"
 	}
 
@@ -111,8 +123,6 @@ metadata {
     }
 	preferences {
 		input ("device_IP", "text", title: "Manual Install Device IP")
-		input ("refreshInterval", "enum", title: "Device Refresh Interval (minutes)", 
-			   options: ["1", "5", "15", "30"])
 		input ("statusLed", "bool", title: "Enable the Status LED")
 		input ("debug", "bool", title: "Enable debug logging")
 		input ("descriptionText", "bool", title: "Enable description text logging")
@@ -138,13 +148,7 @@ def updated() {
 		logInfo("Device IP set to ${getDataValue("deviceIP")}")
 	}
 
-	switch(refreshInterval) {
-		case "1" : runEvery1Minute(refresh); break
-		case "5" : runEvery5Minutes(refresh); break
-		case "15" : runEvery15Minutes(refresh); break
-		default: runEvery30Minutes(refresh)
-	}
-
+	runEvery5Minutes(refresh)
 	setStatusLed()
 	updateDataValue("driverVersion", driverVer())
 
@@ -152,20 +156,18 @@ def updated() {
 }
 
 //	===== Commands and updating state =====
-def on() { kick() }
-def off() { kick() }
-def kick() {
-	logDebug("kick.")
+def forceMeasurement() {
+	logDebug("forceMeasurement")
 	sendGetCmd("/api/air/kick", "kickParse")
 }
 def kickParse(response) {
-	logDebug("kickResponse.  Measurement has started and will take about 1 minute for results to show.")
-	sendEvent(name: "kickActive", value: true)
-	runIn(60, postKick)
+	logDebug("kickParse.  Measurement has started and will take about 1 minute for results to show.")
+	sendEvent(name: "updatingData", value: true)
+	runIn(50, postKick)
 }
 def postKick() {
-	logDebug("postKick.  Measuring quality post Kick.")
-	sendEvent(name: "kickActive", value: false)
+	logDebug("postKick.  Retrieving air quality data.")
+	sendEvent(name: "updatingData", value: false)
 	refresh()
 }
 def ping() {
