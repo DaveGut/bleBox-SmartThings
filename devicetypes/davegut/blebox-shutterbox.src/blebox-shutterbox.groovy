@@ -14,9 +14,11 @@ open API documentation for development and is intended for integration into Smar
 
 ===== Hiatory =====
 08.22.19	1.0.01	Initial release.
+10.10.10	1.1.01	Combined drivers and updated to match other platform.
+					Note:  If device is does not have tile, the tilt command is ignored with a debug message.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.0.01" }
+def driverVer() { return "1.1.01" }
 metadata {
 	definition (name: "bleBox shutterBox",
 				namespace: "davegut",
@@ -27,9 +29,14 @@ metadata {
 		capability "Refresh"
         capability "Switch Level"
         capability "Actuator"
-        capability "Health Check"
+        command "setPosition", ["NUMBER"]
+        attribute "position", "number"
 		command "stop"
+		command "setTilt", ["NUMBER"]
+		attribute "tilt", "number"
+        capability "Health Check"
 	}
+
     tiles(scale: 2) {
         multiAttributeTile(name:"windowShade", type: "generic", width: 6, height: 4) {
             tileAttribute("device.windowShade", key: "PRIMARY_CONTROL") {
@@ -49,21 +56,25 @@ metadata {
                 	icon: "https://static.thenounproject.com/png/229594-200.png", 
                     backgroundColor: "#ffffff", nextState: "partially open"
             }
+			tileAttribute ("device.position", key: "SLIDER_CONTROL") {
+				attributeState "position", label: 'Position: ${currentValue}%', action: "setPosition"
+			}
         }
-        valueTile("positionLabel", "device.level", width: 2, height: 2) {
-            state "level", label: 'Position is ${currentValue}%', icon: "https://static.thenounproject.com/png/147594-200.png"
+        valueTile("tiltLabel", "device.level", width: 2, height: 1) {
+            state "tilt", label: '', icon: "https://static.thenounproject.com/png/1899991-200.png"
         }
-        controlTile("positionSliderControl", "device.level", "slider", width:2, height: 2) {
-            state "level", action:"switch level.setLevel"
+        controlTile("tiltSliderControl", "device.tilt", "slider", width:2, height: 1) {
+            state "tilt", action:"setTilt"
         }
-        valueTile("2x4", "", width: 4, height: 2)
-        standardTile("refresh", "device.refresh", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
+        valueTile("2x2", "", width: 2, height: 2)
+        standardTile("refresh", "device.refresh", decoration: "flat", width: 2, height: 2) {
             state "default", label:"", action:"refresh.refresh", icon:"st.secondary.refresh"
         }
 
         main "windowShade"
         details(["windowShade",
-        		 "positionLabel", "positionSliderControl", "refresh"])
+        		 "tiltLabel", "2x2", "refresh",
+                 "tiltSliderControl"])
     }
 	preferences {
 		input ("device_IP", "text", title: "Manual Install Device IP")
@@ -73,11 +84,13 @@ metadata {
 		input ("descriptionText", "bool", title: "Enable description text logging")
 	}
 }
+
 def installed() {
 	logInfo("Installing...")
 	sendEvent(name: "DeviceWatch-Enroll",value: "{\"protocol\": \"LAN\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${device.hub.hardwareID}\"}", displayed: false)
 	updated()
 }
+
 def updated() {
 	logInfo("Updating...")
 	unschedule()
@@ -110,44 +123,54 @@ def updated() {
 //	===== Commands and updating state =====
 def open() {
 	logDebug("open")
-	sendGetCmd("/s/u", "commandParse")
+	def percentage = device.currentValue("position").toInteger()
+	setPosition(percentage)
 }
+
 def close() {
 	logDebug("close")
 	sendGetCmd("/s/d", "commandParse")
 }
+
 def stop() {
 	logDebug("stop")
 	sendGetCmd("/api/shutter/state", "stopParse")
 }
-def stopParse(response) {
-	if(response.status != 200 || response.body == null) {
-		logWarn("parseInput: Command generated an error return: ${response.status} / ${response.body}")
-		return
-	}
-	def jsonSlurper = new groovy.json.JsonSlurper()
-	def cmdResponse = jsonSlurper.parseText(response.body)
 
+def stopParse(response) {
+	def cmdResponse = parseInput(response)
 	logDebug("stopParse: cmdResponse = ${cmdResponse}")
 	def stopPosition = cmdResponse.shutter.currentPos.position
-	setLevel(stopPosition.toInteger())
+	setPosition(stopPosition.toInteger())
 }
-def setLevel(percentage) {
+
+def setPosition(percentage) {
 	logDebug("setLevel:  ${percentage}")
 	sendGetCmd("/s/p/${percentage}", "commandParse")
 }
+
+def setTilt(percentage) {
+	if (getDataValue("mode") != "tilt") {
+		logDebug("setTilt: not supported for device mode.")
+		return
+	}
+	logDebug("setTilt: percentage = ${percentage}")
+	sendGetCmd("/s/t/${percentage}", "commandParse")
+}
+
+def presetPosition(value) {
+	logDebug("presetPosition not supported")
+}
+
+def ping() { refresh() }
+
 def refresh() {
 	logDebug("refresh")
 	sendGetCmd("/api/shutter/extended/state", "commandParse")
 }
-def commandParse(response) {
-	if(response.status != 200 || response.body == null) {
-		logWarn("parseInput: Command generated an error return: ${response.status} / ${response.body}")
-		return
-	}
-	def jsonSlurper = new groovy.json.JsonSlurper()
-	def cmdResponse = jsonSlurper.parseText(response.body)
 
+def commandParse(response) {
+	def cmdResponse = parseInput(response)
 	logDebug("commandParse: cmdResponse = ${cmdResponse}")
 	def shutter = cmdResponse.shutter
 	def windowShade
@@ -170,10 +193,13 @@ def commandParse(response) {
 		default:
 			windowShade = "unknown"
 	}
-	sendEvent(name: "level", value: shutter.currentPos.position)
+	sendEvent(name: "position", value: shutter.currentPos.position)
+	if (getDataValue("mode") == "tilt") {
+		sendEvent(name: "tilt", value: shutter.currentPos.tilt)
+	}
 	sendEvent(name: "windowShade", value: windowShade)
-	logInfo("commandParse: ${windowShade} // ${shutter.currentPos.tilt}")
-	if(shutter.currentPos != shutter.desiredPos) { runIn(10, refresh) }
+	logInfo("commandParse: position = ${shutter.currentPos.position}")
+	if(shutter.currentPos != shutter.desiredPos) { runIn(5, refresh) }
 }
 
 
@@ -196,6 +222,14 @@ private sendPostCmd(command, body, action){
 						  Host: "${getDataValue("deviceIP")}:80"
 					  ]]
 	sendHubCommand(new physicalgraph.device.HubAction(parameters, null, [callback: action]))
+}
+def parseInput(response) {
+	try {
+		def jsonSlurper = new groovy.json.JsonSlurper()
+		return jsonSlurper.parseText(response.body)
+	} catch (error) {
+		logWarn "CommsError: ${error}."
+	}
 }
 
 

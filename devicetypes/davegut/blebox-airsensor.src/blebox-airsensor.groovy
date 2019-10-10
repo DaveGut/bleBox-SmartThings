@@ -10,25 +10,15 @@ Unless required by applicable law or agreed to in writing,software distributed u
 language governing permissions and limitations under the License.
 
 DISCLAIMER: The author of this integration is not associated with blebox.  This code uses the blebox
-open API documentation for development and is intended for integration into the SmartThings.
+open API documentation for development and is intended for integration into SmartThings.
 
 ===== Hiatory =====
 08.22.19	1.0.01	Initial release.  Known issue: Does not work with new SmartThings App.
+10.10.19	1.1.01	Update per user comments.  Updated based on other platform
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.0.01" }
+def driverVer() { return "1.1.01" }
 
-
-
-
-
-
-
-
-
-
-
-//	Add label to display for measurement in process
 metadata {
 	definition (name: "bleBox airSensor",
 				namespace: "davegut",
@@ -46,12 +36,10 @@ metadata {
 		attribute "airQualityLevel", "string"
         attribute "measurementTime", "string"
  		command "forceMeasurement"
-		attribute "updatingData", "boolean"
         capability "Refresh"
         capability "Health Check"
 	}
 
-	def pm10Label = '${currentValue("PM_10_Measurement")}\n${currentValue("pm10Quality")}'
 	tiles(scale: 2) {
 	   	multiAttributeTile(name:"airQuality", type:"device.airQualityLevel", width:6, height:4, canChangeIcon: true) {
     		tileAttribute("device.airQualityLevel", key: "PRIMARY_CONTROL") {
@@ -62,7 +50,7 @@ metadata {
 	            attributeState("Very High", label: '${currentValue}', backgroundColor: "#FF1203")
            	}
 			tileAttribute ("device.measurementTime", key: "SECONDARY_CONTROL") {
-				attributeState "default", label: '${currentValue}'
+				attributeState "default", label: 'Last Update: ${currentValue}'
 			}
        	}
 		valueTile("PM1", "default", width: 2, height: 1) {
@@ -84,22 +72,22 @@ metadata {
 			state "default", label: '${currentValue} µg/m³'
 		}
  		valueTile("PM25Quality", "device.pm2_5Quality", width: 2, height: 1, decoration: "flat") {
-			state "default", label: '${currentValue}'
+			state "default", label: '${currentValue} AQI'
 		}
  		valueTile("PM10Quality", "device.pm10Quality", width: 2, height: 1, decoration: "flat") {
-			state "default", label: '${currentValue}'
+			state "default", label: '${currentValue} AQI'
 		}
  		valueTile("CAQI", "device.airQuality", width: 4, height: 1, decoration: "flat") {
 			state "default", label: 'CAQI: ${currentValue}'
 		}
  		valueTile("PM1Trend", "device.PM_1_Trend", width: 2, height: 1, decoration: "flat") {
-			state "default", label: '${currentValue}'
+			state "default", label: 'Trend: ${currentValue}'
 		}
  		valueTile("PM25Trend", "device.PM_2_5_Trend", width: 2, height: 1, decoration: "flat") {
-			state "default", label: '${currentValue}'
+			state "default", label: 'Trend: ${currentValue}'
 		}
  		valueTile("PM10Trend", "device.PM_10_Trend", width: 2, height: 1, decoration: "flat") {
-			state "default", label: '${currentValue}'
+			state "default", label: 'Trend: ${currentValue}'
 		}
 		standardTile("refresh", "default", width: 2, height: 1, decoration: "flat") {
 			state "default", label:"Refresh", action:"refresh"
@@ -128,13 +116,13 @@ metadata {
 		input ("descriptionText", "bool", title: "Enable description text logging")
 	}
 }
+
 def installed() {
 	logInfo("Installing...")
-	sendEvent(name: "DeviceWatch-DeviceStatus", value: "online")
-	sendEvent(name: "healthStatus", value: "online")
 	sendEvent(name: "DeviceWatch-Enroll", value: [protocol: "LAN", scheme:"untracked"].encodeAsJson(), displayed: false)
 	runIn(2, updated)
 }
+
 def updated() {
 	logInfo("Updating...")
 	unschedule()
@@ -146,45 +134,50 @@ def updated() {
 		}
 		updateDataValue("deviceIP", device_IP)
 		logInfo("Device IP set to ${getDataValue("deviceIP")}")
+		//	Update device name on manual installation to standard name
+		sendGetCmd("/api/device/state", "setDeviceName")
 	}
 
 	runEvery5Minutes(refresh)
-	setStatusLed()
+	runIn(5, setLed)
 	updateDataValue("driverVersion", driverVer())
+	logInfo("Refresh interval set for every 5 minutes.")
+	logInfo("Debug logging is: ${debug}.")
+	logInfo("Description text logging is ${descriptionText}.")
 
 	refresh()
 }
+
+def setDeviceName(response) {
+	def cmdResponse = parseInput(response)
+	logDebug("setDeviceData: ${cmdResponse}")
+	device.setName(cmdResponse.device.type)
+	logInfo("setDeviceData: Device Name updated to ${cmdResponse.device.type}")
+}
+
 
 //	===== Commands and updating state =====
 def forceMeasurement() {
 	logDebug("forceMeasurement")
 	sendGetCmd("/api/air/kick", "kickParse")
 }
+
 def kickParse(response) {
+	def cmdResponse = parseInput(response)
 	logDebug("kickParse.  Measurement has started and will take about 1 minute for results to show.")
-	sendEvent(name: "updatingData", value: true)
-	runIn(50, postKick)
+    sendEvent(name: "measurementTime", value: "Updating...")
+	runIn(50, refresh)
 }
-def postKick() {
-	logDebug("postKick.  Retrieving air quality data.")
-	sendEvent(name: "updatingData", value: false)
-	refresh()
-}
-def ping() {
-	logDebug("ping")
-    refresh()
-}
+
+def ping() { refresh() }
+
 def refresh() {
 	logDebug("refesh.")
 	sendGetCmd("/api/air/state", "commandParse")
 }
+
 def commandParse(response) {
-	if(response.status != 200 || response.body == null) {
-		logWarn("parseInput: Command generated an error return: ${response.status} / ${response.body}")
-		return
-	}
-	def jsonSlurper = new groovy.json.JsonSlurper()
-	def cmdResponse = jsonSlurper.parseText(response.body)
+	def cmdResponse = parseInput(response)
 	logDebug("commandParse: cmdResp = ${cmdResponse}")
     
 	def pm1Data = cmdResponse.air.sensors.find{ it.type == "pm1" }
@@ -247,6 +240,7 @@ def commandParse(response) {
     sendEvent(name: "measurementTime", value: now)
 	logInfo("commandParse: Air Quality Data, Index and Category Updated")
 }
+
 def getTrendText(trend) {
 	def trendText
 	switch(trend) {
@@ -260,21 +254,17 @@ def getTrendText(trend) {
 
 
 //	===== Set Status LED =====
-def setStatusLed() {
+def setLed() {
 	logDebug("setLed")
-	def enable = 1
-	if (statusLed != true) { enable = 0 }
+	def enable = 0
+	if (statusLed == true) { enable = 1 }
 	sendPostCmd("/api/settings/set",
 				"""{"settings":{"statusLed":{"enabled":${enable}}}}""",
 				"ledStatusParse")
 }
+
 def ledStatusParse(response) {
-	if(response.status != 200 || response.body == null) {
-		logWarn("parseInput: Command generated an error return: ${response.status} / ${response.body}")
-		return
-	}
-	def jsonSlurper = new groovy.json.JsonSlurper()
-	def cmdResponse = jsonSlurper.parseText(response.body)
+	def cmdResponse = parseInput(response)
 	state.statusLed = cmdResponse.settings.statusLed.enabled
 	logDebug("ledStatusParse: ${cmdResponse}")
 }
@@ -299,6 +289,18 @@ private sendPostCmd(command, body, action){
 						  Host: "${getDataValue("deviceIP")}:80"
 					  ]]
 	sendHubCommand(new physicalgraph.device.HubAction(parameters, null, [callback: action]))
+}
+def parseInput(response) {
+	try {
+		def jsonSlurper = new groovy.json.JsonSlurper()
+		return jsonSlurper.parseText(response.body)
+	} catch (error) {
+		if (response.status == 204) {
+			logDebug("parseInput: valid 204 return to kick command")
+		} else {
+			logWarn "CommsError: ${error}."
+		}
+	}
 }
 
 

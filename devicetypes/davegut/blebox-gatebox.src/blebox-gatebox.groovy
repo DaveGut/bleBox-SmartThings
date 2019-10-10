@@ -13,44 +13,45 @@ DISCLAIMER: The author of this integration is not associated with blebox.  This 
 open API documentation for development and is intended for integration into SmartThings.
 
 ===== Hiatory =====
-08.22.19	1.0.01	Initial release.
+10.10.10	1.1.01	Combined drivers and updated to match other platform.
+					Note:  If device is non-dimming, the level command is ignored with a debug message.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.0.01" }
+def driverVer() { return "1.1.01" }
 metadata {
 	definition (name: "bleBox gateBox",
 				namespace: "davegut",
 				author: "Dave Gutheinz",
                 ocfDeviceType: "oic.d.garagedoor") {
-		capability "Door Control"
-        command "altControl"
+		capability "Momentary"
+		capability "Contact Sensor"
 		capability "Refresh"
         capability "Health Check"
 	}
 	tiles(scale: 2) {
-		standardTile("doorCtrl", "device.door", width: 6, height: 4, decoration: "flat") {
-    		state "open", label: '${currentValue}', action: "close", 
+		standardTile("doorCtrl", "device.contact", width: 6, height: 4, decoration: "flat") {
+    		state "open", label: '${currentValue}', action: "close",
             	icon: "st.switches.door.open", backgroundColor: "#e86d13"
-    		state "closed", label: '${currentValue}', action: "open", 
+    		state "closed", label: '${currentValue}', action: "push",
             	icon: "st.switches.door.closed", backgroundColor: "#ffffff"
-    		state "unknown", label: '${currentValue}', action: "close", 
+    		state "unknown", label: '${currentValue}', action: "push",
             	icon: "st.switches.door.open", backgroundColor: "#e86d13"
         }
-		standardTile("altCtrl", "altControl", width: 4, height: 2, decoration: "flat") {
-			state "default", label: "Alternate Control", action: "altControl"
-		}
 		standardTile("refresh", "capability.refresh", width: 2, height: 2, decoration: "flat") {
 			state "default", label: "Refresh", action: "refresh.refresh"
 		}
-         main(["doorCtrl"])
-        details(["doorCtrl", "altCtrl", "refresh"])
+        main(["doorCtrl"])
+        details(["doorCtrl", "refresh"])
     }
 	preferences {
 		input ("device_IP", "text", title: "Manual Install Device IP")
+		input ("reverseSense", "bool", title: "Reverse reported Open and Close Status.", defaultValue: false)
+		input ("cycleTime", "number",title: "Nominal Door Cycle Time (seconds)",
+			   defaultValue: 30)
 		input ("refreshInterval", "enum", title: "Device Refresh Interval (minutes)", 
-			   options: ["1", "5", "15", "30"])
+			   options: ["1", "5", "15", "30"], defaultValue: "30")
 		input ("debug", "bool", title: "Enable debug logging", defaultValue: false)
-		input ("descriptionText", "bool", title: "Enable description text logging")
+		input ("descriptionText", "bool", title: "Enable description text logging", defaultValue: true)
 	}
 }
 def installed() {
@@ -69,6 +70,12 @@ def updated() {
 		}
 		updateDataValue("deviceIP", device_IP)
 		logInfo("Device IP set to ${getDataValue("deviceIP")}")
+		//	Update device name on manual installation to standard name
+		sendGetCmd("/api/device/state", "setDeviceName")
+	}
+
+	if (!getDataValue("mode")) {
+		sendGetCmd("/api/gate/state", "setGateType")
 	}
 
 	switch(refreshInterval) {
@@ -79,52 +86,64 @@ def updated() {
 	}
 
 	updateDataValue("driverVersion", driverVer())
+	logInfo("Debug logging is: ${debug}.")
+	logInfo("Description text logging is ${descriptionText}.")
+	logInfo("Refresh interval set for every ${refreshInterval} minute(s).")
 
 	refresh()
 }
 
+def setDeviceName(response) {
+	def cmdResponse = parseInput(response)
+	logDebug("setDeviceData: ${cmdResponse}")
+	device.setName(cmdResponse.device.type)
+	logInfo("setDeviceData: Device Name updated to ${cmdResponse.device.type}")
+}
+
+def setGateType(response) {
+	def cmdResponse = parseInput(response)
+	logDebug("setGateType: <b>${cmdResponse}")
+	if (cmdResponse == "error") { return }
+	def mode
+	switch(cmdResponse.gateType) {
+		case "0": mode = "slidingDoor"; break
+		case "1": mode = "garageDoor"; break
+		case "2": mode = "overDoor"; break
+		case "3": mode = "door"; break
+		default: mode = "notSet"
+	}
+	updateDataValue("mode", mode)
+	logInfo("setGateType: Gate Type set to ${mode}")
+}
+
 
 //	===== Commands and Parse Returns =====
-def open() {
-	logDebug("open")
+def push() {
+	logDebug("push: currently ${device.currentValue("contact")}")
 	sendGetCmd("/s/p", "commandParse")
-    runIn(20, refresh)
+	runIn(cycleTime.toInteger(), refresh)
 }
-def close() {
-	logDebug("close")
-	sendGetCmd("/s/p", "commandParse")
-    runIn(20, refresh)
-}
-def altControl() {
-	logDebug("secondary")
-	sendGetCmd("/s/s", "commandParse")
-    runIn(20, refresh)
-}
+
 def ping() {
 	logDebug("ping")
     refresh()
 }
+
 def refresh() {
 	logDebug("refresh")
 	sendGetCmd("/api/gate/state", "commandParse")
 }
+
 def commandParse(response) {
-	if(response.status != 200 || response.body == null) {
-		logWarn("parseInput: Command generated an error return: ${response.status} / ${response.body}")
-		return
-	}
-	def jsonSlurper = new groovy.json.JsonSlurper()
-	def cmdResponse = jsonSlurper.parseText(response.body)
-
-	logDebug("refreshParse: response = ${cmdResponse}")
-	def position = cmdResponse.currentPos
-	def doorState = "unknown"
-	if (position == 100) { doorState = "open" }
-	else if (position == 0) { doorState = "closed" }
-	sendEvent(name: "door", value: doorState)
-	log.info "${device.label} refreshResponse: door = ${doorState}"
+	def cmdResponse = parseInput(response)
+	logDebug("commandParse: ${cmdResponse}")
+	if (cmdResponse.gate) { cmdResponse = cmdResponse.gate }
+	def closedPos = 0
+	if (reverseSense == true) { closedPos = 100 }
+	def contact = "open"
+	if (cmdResponse.currentPos == closedPos) { contact = "closed" }
+	sendEvent(name: "contact", value: contact)
 }
-
 
 //	===== Communications =====
 private sendGetCmd(command, action){
@@ -145,6 +164,14 @@ private sendPostCmd(command, body, action){
 						  Host: "${getDataValue("deviceIP")}:80"
 					  ]]
 	sendHubCommand(new physicalgraph.device.HubAction(parameters, null, [callback: action]))
+}
+def parseInput(response) {
+	try {
+		def jsonSlurper = new groovy.json.JsonSlurper()
+		return jsonSlurper.parseText(response.body)
+	} catch (error) {
+		logWarn "CommsError: ${error}."
+	}
 }
 
 

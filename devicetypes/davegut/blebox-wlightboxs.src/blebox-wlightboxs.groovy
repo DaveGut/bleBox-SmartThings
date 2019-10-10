@@ -14,9 +14,11 @@ open API documentation for development and is intended for integration into Smar
 
 ===== Hiatory =====
 08.22.19	1.0.01	Initial release.
+10.10.10	1.1.01	Updates to match other platform.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.0.01" }
+def driverVer() { return "1.1.01" }
+
 metadata {
 	definition (name: "bleBox wLightBoxS",
 				namespace: "davegut",
@@ -64,6 +66,7 @@ def installed() {
 	state.savedLevel = "FF"
 	updated()
 }
+
 def updated() {
 	state.notice = "<b>Developmental Version.  This is the pre-Alpha version of this driver.</b>"
 	logInfo("Updating...")
@@ -76,6 +79,8 @@ def updated() {
 		}
 		updateDataValue("deviceIP", device_IP)
 		logInfo("Device IP set to ${getDataValue("deviceIP")}")
+		//	Update device name on manual installation to standard name
+		sendGetCmd("/api/device/state", "setDeviceData")
 	}
 
 	switch(refreshInterval) {
@@ -92,6 +97,14 @@ def updated() {
 	refresh()
 }
 
+def setDeviceName(response) {
+	def cmdResponse = parseInput(response)
+	logDebug("setDeviceData: ${cmdResponse}")
+	device.setName(cmdResponse.device.type)
+	logInfo("setDeviceData: Device Name updated to ${cmdResponse.device.type}")
+}
+
+
 //	===== Commands and Parse Returns =====
 def on() {
 	logDebug("on")
@@ -99,12 +112,14 @@ def on() {
 				"""{"light":{"desiredColor":"${state.savedLevel}","fadeSpeed":${state.defFadeSpeed}}}""",
 				"commandParse")
 }
+
 def off() {
 	logDebug("off")
 	sendPostCmd("/api/light/set",
 				"""{"light":{"desiredColor":"00","fadeSpeed":${state.defFadeSpeed}}}""",
 				"commandParse")
 }
+
 def setLevel(level, transitionTime = null) {
 	def fadeSpeed = state.defFadeSpeed
 	if (transitionTime != null) { fadeSpeed = getFadeSpeed(transitionTime) }
@@ -116,6 +131,7 @@ def setLevel(level, transitionTime = null) {
 				"""{"light":{"desiredColor":"${hexLevel}","fadeSpeed":${fadeSpeed}}}""",
 				"commandParse")
 }
+
 def getFadeSpeed(transitionTime) {
 	logDebug("getFadeSpeed: ${transitionTime}")
 	def timeIndex = (10 * transitionTime).toInteger()
@@ -142,21 +158,15 @@ def getFadeSpeed(transitionTime) {
 	return fadeSpeed
 }
 
-def ping() {
-	logDebug("ping")
-    refresh()
-}
+def ping() { refresh() }
+
 def refresh() {
 	logDebug("refresh")
 	sendGetCmd("/api/light/state", "commandParse")
 }
+
 def commandParse(response) {
-	if(response.status != 200 || response.body == null) {
-		logWarn("parseInput: Command generated an error return: ${response.status} / ${response.body}")
-		return
-	}
-	def jsonSlurper = new groovy.json.JsonSlurper()
-	def cmdResponse = jsonSlurper.parseText(response.body)
+	def cmdResponse = parseInput(response)
 	logDebug("commandParse: response = ${cmdResponse}")
 	def hexLevel = cmdResponse.light.desiredColor.toUpperCase()
 	if (hexLevel == "00") {
@@ -165,7 +175,7 @@ def commandParse(response) {
 		logInfo "commandParse: switch = off"
 	} else {
 		sendEvent(name: "switch", value: "on")
-        def brightness = Integer.parseInt(hexLevel,16)
+		def brightness = Integer.parseInt(hexLevel,16)
 		def level = (0.5 + brightness/ 2.55).toInteger()
 		sendEvent(name: "level", value: level)
 		logInfo "commandParse: switch = on, level = ${level}"
@@ -192,6 +202,14 @@ private sendPostCmd(command, body, action){
 						  Host: "${getDataValue("deviceIP")}:80"
 					  ]]
 	sendHubCommand(new physicalgraph.device.HubAction(parameters, null, [callback: action]))
+}
+def parseInput(response) {
+	try {
+		def jsonSlurper = new groovy.json.JsonSlurper()
+		return jsonSlurper.parseText(response.body)
+	} catch (error) {
+		logWarn "CommsError: ${error}."
+	}
 }
 
 
