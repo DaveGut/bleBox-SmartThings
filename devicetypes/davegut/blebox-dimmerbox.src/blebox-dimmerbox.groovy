@@ -90,7 +90,8 @@ def updated() {
 		sendGetCmd("/api/dimmer/state", "setDimmerMode")
 	}
 
-	switch(refreshInterval) {
+	if (refreshInterval == null) { refreshInterval = 30 }
+    switch(refreshInterval) {
 		case "1" : runEvery1Minute(refresh); break
 		case "5" : runEvery5Minutes(refresh); break
 		case "15" : runEvery15Minutes(refresh); break
@@ -208,8 +209,8 @@ def commandParse(response) {
 		sendEvent(name: "level", value: level)
 	}
 	logInfo "commandParse: switch = ${onOff}, level = ${level}"
-	if (state.pollInterval != "0") {
-		runIn(state.pollInterval.toInteger(), quickPoll)
+	if (shortPoll != "0") {
+		runIn(shortPoll, quickPoll)
 	}
 }
 
