@@ -15,9 +15,10 @@ open API documentation for development and is intended for integration into Smar
 ===== Hiatory =====
 10.10.10	1.1.01	Combined drivers and updated to match other platform.
 					Note:  If device is non-dimming, the level command is ignored with a debug message.
+02.16.20	1.1.02	Added username and password as an optional Authorization Code.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.1.01" }
+def driverVer() { return "1.1.02" }
 metadata {
 	definition (name: "bleBox gateBox",
 				namespace: "davegut",
@@ -52,6 +53,8 @@ metadata {
 			   options: ["1", "5", "15", "30"], defaultValue: "30")
 		input ("debug", "bool", title: "Enable debug logging", defaultValue: false)
 		input ("descriptionText", "bool", title: "Enable description text logging", defaultValue: true)
+		input ("authLogin", "text", title: "Optional Auth login")
+		input ("authPassword", "text", title: "Auth password")
 	}
 }
 def installed() {
@@ -146,12 +149,18 @@ def commandParse(response) {
 }
 
 //	===== Communications =====
+def getAuthorizationHeader() {
+		def encoded = "${authLogin}:${authPassword}".bytes.encodeBase64()
+		return "Basic ${encoded}"	
+}
+
 private sendGetCmd(command, action){
 	logDebug("sendGetCmd: ${command} // ${getDataValue("deviceIP")} // ${action}")
 	def parameters = [method: "GET",
     				  path: command,
                       headers: [
-                          Host: "${getDataValue("deviceIP")}:80"
+                          Host: "${getDataValue("deviceIP")}:80",
+						  Authorization: getAuthorizationHeader()
                       ]]
 	sendHubCommand(new physicalgraph.device.HubAction(parameters, null, [callback: action]))
 }
@@ -161,7 +170,8 @@ private sendPostCmd(command, body, action){
 					  path: command,
 					  body: body,
 					  headers: [
-						  Host: "${getDataValue("deviceIP")}:80"
+						  Host: "${getDataValue("deviceIP")}:80",
+						  Authorization: getAuthorizationHeader()
 					  ]]
 	sendHubCommand(new physicalgraph.device.HubAction(parameters, null, [callback: action]))
 }
