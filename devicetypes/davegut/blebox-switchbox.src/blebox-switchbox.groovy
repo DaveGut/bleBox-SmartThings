@@ -117,11 +117,7 @@ def commandParse(response) {
 	logDebug("commandParse: cmdResponse = ${cmdResponse}")
     
 	def relayState
-	if (cmdResponse[0]) {
-		relayState = cmdResponse[0].state
-	} else if (cmdResponse.relays[0]) {
-		relayState = cmdResponse.relays[0].state
-	}
+	relayState = cmdResponse.relays[0].state
 	
 	def onOff = "off"
 	if (relayState == 1) { onOff = "on" }
