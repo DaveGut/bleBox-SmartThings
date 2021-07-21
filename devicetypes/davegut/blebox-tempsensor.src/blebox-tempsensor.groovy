@@ -32,7 +32,7 @@ metadata {
 	tiles(scale: 2) {
 	   	multiAttributeTile(name:"temperature", type:"device.temperature", width:6, height:4, canChangeIcon: true) {
     		tileAttribute("device.temperature", key: "PRIMARY_CONTROL") {
-	            attributeState("default", label:'${currentValue}°', icon: "st.Weather.weather2", 
+	            attributeState("default", label:'${currentValue}Â°', icon: "st.Weather.weather2", 
                 backgroundColor: "#1e9cbb")
             }
             tileAttribute("device.trend", key: "SECONDARY_CONTROL") {
