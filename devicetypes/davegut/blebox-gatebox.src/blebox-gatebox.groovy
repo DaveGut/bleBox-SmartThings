@@ -16,10 +16,9 @@ open API documentation for development and is intended for integration into Smar
 10.10.10	1.1.01	Combined drivers and updated to match other platform.
 					Note:  If device is non-dimming, the level command is ignored with a debug message.
 02.16.20	1.1.02	Added username and password as an optional Authorization Code.
-07.31.21	2.0.0	Update to latest API Version
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "2.0.0" }
+def driverVer() { return "1.1.02" }
 metadata {
 	definition (name: "bleBox gateBox",
 				namespace: "davegut",
@@ -66,8 +65,6 @@ def installed() {
 def updated() {
 	logInfo("Updating...")
 	unschedule()
-    log.warning "THIS INTEGRATION IS DEPENDENTENT ON THE SMART THINGS IDE WHICH WILL BE DISABLED IN THE NEAR FUTURE.  THERE IS NO PLAN TO UPGRADE THIS INTEGRATION TO THE NEW NETHODOLOGY."
-    state.notice = "THIS INTEGRATION IS DEPENDENTENT ON THE SMART THINGS IDE WHICH WILL BE DISABLED IN THE NEAR FUTURE.  THERE IS NO PLAN TO UPGRADE THIS INTEGRATION TO THE NEW NETHODOLOGY."
 
 	if (!getDataValue("applicationVersion")) {
 		if (!device_IP) {

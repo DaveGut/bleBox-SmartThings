@@ -16,10 +16,9 @@ open API documentation for development and is intended for integration into the 
 09.20.19	1.2.01.	Initial Parent - Child driver release.
 					Added link to Application that will check/update IPs if the communications fail.
 10.01.19	1.3.01. Updated error handling.
-07.31.21	2.0.0	Update to latest API Version
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "2.0.0" }
+def driverVer() { return "1.3.01" }
 
 metadata {
 	definition (name: "bleBox wLightBox Rgb",
@@ -105,8 +104,6 @@ def installed() {
 def updated() {
 	logInfo("Updating...")
 	unschedule()
-    log.warning "THIS INTEGRATION IS DEPENDENTENT ON THE SMART THINGS IDE WHICH WILL BE DISABLED IN THE NEAR FUTURE.  THERE IS NO PLAN TO UPGRADE THIS INTEGRATION TO THE NEW NETHODOLOGY."
-    state.notice = "THIS INTEGRATION IS DEPENDENTENT ON THE SMART THINGS IDE WHICH WILL BE DISABLED IN THE NEAR FUTURE.  THERE IS NO PLAN TO UPGRADE THIS INTEGRATION TO THE NEW NETHODOLOGY."
     if (fadeSpeed) { state.defTransTime = 1000 * fadeSpeed }
     else { state.defTransTime = 1000 }
     state.transTime = state.defTransTime

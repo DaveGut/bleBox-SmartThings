@@ -14,10 +14,10 @@ open API documentation for development and is intended for integration into the 
 
 ===== Hiatory =====
 08.22.19	1.0.01	Initial release.
-07.31.21	2.0.0	Update to latest API Version
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "2.0.0" }
+def driverVer() { return "1.0.01" }
+
 metadata {
 	definition (name: "bleBox tempSensor",
 				namespace: "davegut",
@@ -40,7 +40,7 @@ metadata {
            }
         }
 		valueTile("health", "device.sensorHealth", width: 4, height: 2) {
-			state "default", label: 'Health: ${currentValue}'
+			state "default", label: 'Sensor Health: ${currentValue}'
 		}
 		standardTile("refresh", "capability.refresh", width: 2, height: 2, decoration: "flat") {
 			state "default", label: "Refresh", action: "refresh.refresh"
@@ -50,22 +50,23 @@ metadata {
     }
 	preferences {
 		input ("device_IP", "text", title: "Manual Install Device IP")
+		input ("tempScale", "enum", title: "Temperature Scale", options: ["C", "F"])
 		input ("refreshInterval", "enum", title: "Device Refresh Interval (minutes)", 
 			   options: ["1", "5", "15", "30"])
 		input ("debug", "bool", title: "Enable debug logging")
 		input ("descriptionText", "bool", title: "Enable description text logging")
 	}
 }
+
 def installed() {
 	logInfo("Installing...")
 	sendEvent(name: "DeviceWatch-Enroll",value: "{\"protocol\": \"LAN\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${device.hub.hardwareID}\"}", displayed: false)
 	updated()
 }
+
 def updated() {
 	logInfo("Updating...")
 	unschedule()
-    log.warning "THIS INTEGRATION IS DEPENDENTENT ON THE SMART THINGS IDE WHICH WILL BE DISABLED IN THE NEAR FUTURE.  THERE IS NO PLAN TO UPGRADE THIS INTEGRATION TO THE NEW NETHODOLOGY."
-    state.notice = "THIS INTEGRATION IS DEPENDENTENT ON THE SMART THINGS IDE WHICH WILL BE DISABLED IN THE NEAR FUTURE.  THERE IS NO PLAN TO UPGRADE THIS INTEGRATION TO THE NEW NETHODOLOGY."
 
 	if (!getDataValue("applicationVersion")) {
 		if (!device_IP) {
@@ -74,6 +75,8 @@ def updated() {
 		}
 		updateDataValue("deviceIP", device_IP)
 		logInfo("Device IP set to ${getDataValue("deviceIP")}")
+		//	Update device name on manual installation to standard name
+		sendGetCmd("/api/device/state", "setDeviceName")
 	}
 
 	switch(refreshInterval) {
@@ -82,33 +85,36 @@ def updated() {
 		case "15" : runEvery15Minutes(refresh); break
 		default: runEvery30Minutes(refresh)
 	}
-
+	if (tempScale == null) { state.tempScale = "C" }
+    else { state.tempScale = tempScale }
 	updateDataValue("driverVersion", driverVer())
 
 	refresh()
 }
 
-//	===== Commands and Parse Returns =====
-def ping() {
-	logDebug ("Ping")
-    refresh()
+def setDeviceName(response) {
+	def cmdResponse = parseInput(response)
+	logDebug("setDeviceData: ${cmdResponse}")
+	device.setName(cmdResponse.device.type)
+	logInfo("setDeviceData: Device Name updated to ${cmdResponse.device.type}")
 }
+
+
+//	===== Commands and Parse Returns =====
+def ping() { refresh() }
+
 def refresh() {
 	logDebug("refresh.")
 	sendGetCmd("/api/tempsensor/state", "commandParse")
 }
+
 def commandParse(response) {
-	if(response.status != 200 || response.body == null) {
-		logWarn("parseInput: Command generated an error return: ${response.status} / ${response.body}")
-		return
-	}
-	def jsonSlurper = new groovy.json.JsonSlurper()
-	def cmdResponse = jsonSlurper.parseText(response.body)
-	logInfo("refreshParse: cmdResponse = ${cmdResponse}")
-    def tempScale = location.temperatureScale
+	def cmdResponse = parseInput(response)
+	logDebug("commandParse: cmdResponse = ${cmdResponse}")
+
 	def respData = cmdResponse.tempSensor.sensors[0]
 	def temperature = Math.round(respData.value.toInteger() / 10) / 10
-	if (tempScale == "F") {
+	if (state.tempScale == "F") {
 		temperature = Math.round((3200 + 9*respData.value.toInteger() / 5) / 100)
 	}
 	def trend
@@ -120,16 +126,18 @@ def commandParse(response) {
 		case "3":
 			trend = "up"; break
 		default:
-        	trend = "No Data"
+			trend = "No Data"
 	}
 	def sensorHealth = "normal"
-	if (respData.state == "3") { sensorHealth = "sensor error" }
+	if (respData.state == "3") {
+		sensorHealth = "sensor error"
+		logWarn("Sensor Error")
+	}
 	sendEvent(name: "sensorHealth", value: sensorHealth)
-	sendEvent(name: "temperature", value: temperature, unit: "${tempScale}")
+	sendEvent(name: "temperature", value: temperature, unit: tempScale)
 	sendEvent(name: "trend", value: trend)
-	logInfo("refreshParse: Set temperature to ${temperature}${tempScale}")
+	logInfo("commandParse: Temperature value set to ${temperature}")
 }
-
 
 //	===== Communications =====
 private sendGetCmd(command, action){
@@ -150,6 +158,14 @@ private sendPostCmd(command, body, action){
 						  Host: "${getDataValue("deviceIP")}:80"
 					  ]]
 	sendHubCommand(new physicalgraph.device.HubAction(parameters, null, [callback: action]))
+}
+def parseInput(response) {
+	try {
+		def jsonSlurper = new groovy.json.JsonSlurper()
+		return jsonSlurper.parseText(response.body)
+	} catch (error) {
+		logWarn "CommsError: ${error}."
+	}
 }
 
 

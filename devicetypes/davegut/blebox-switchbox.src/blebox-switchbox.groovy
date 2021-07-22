@@ -14,10 +14,11 @@ open API documentation for development and is intended for integration into Smar
 
 ===== Hiatory =====
 08.22.19	1.0.01	Initial release.
-07.31.21	2.0.0	Update to latest API Version
+10.10.10	1.1.01	Updates to match other platform.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "2.0.0" }
+def driverVer() { return "1.1.01" }
+
 metadata {
 	definition (name: "bleBox switchBox",
 				namespace: "davegut",
@@ -48,23 +49,22 @@ metadata {
 		input ("device_IP", "text", title: "Manual Install Device IP")
 		input ("refreshInterval", "enum", title: "Device Refresh Interval (minutes)", 
 			   options: ["1", "5", "15", "30"])
-		input ("fastPoll", "enum",title: "Enable fast polling", 
-			   options: ["No", "1", "2", "3", "4", "5", "10", "15"])
+		input ("shortPoll", "number",title: "Fast Polling Interval ('0' = DISABLED)")
 		input ("debug", "bool", title: "Enable debug logging")
 		input ("descriptionText", "bool", title: "Enable description text logging")
 	}
 }
+
 def installed() {
 	logInfo("Installing...")
 	sendEvent(name: "DeviceWatch-Enroll",value: "{\"protocol\": \"LAN\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${device.hub.hardwareID}\"}", displayed: false)
 	updated()
 }
+
 def updated() {
 	logInfo("Updating...")
 	unschedule()
-    log.warning "THIS INTEGRATION IS DEPENDENTENT ON THE SMART THINGS IDE WHICH WILL BE DISABLED IN THE NEAR FUTURE.  THERE IS NO PLAN TO UPGRADE THIS INTEGRATION TO THE NEW NETHODOLOGY."
-    state.notice = "THIS INTEGRATION IS DEPENDENTENT ON THE SMART THINGS IDE WHICH WILL BE DISABLED IN THE NEAR FUTURE.  THERE IS NO PLAN TO UPGRADE THIS INTEGRATION TO THE NEW NETHODOLOGY."
-
+	
 	if (!getDataValue("applicationVersion")) {
 		if (!device_IP) {
 			logWarn("updated:  deviceIP  is not set.")
@@ -72,6 +72,8 @@ def updated() {
 		}
 		updateDataValue("deviceIP", device_IP)
 		logInfo("Device IP set to ${getDataValue("deviceIP")}")
+		//	Update device name on manual installation to standard name
+		sendGetCmd("/api/device/state", "setDeviceName")
 	}
 
 	switch(refreshInterval) {
@@ -81,11 +83,18 @@ def updated() {
 		default: runEvery30Minutes(refresh)
 	}
 
-	if (!fastPoll || fastPoll =="No") { state.pollInterval = "0" }
-	else { state.pollInterval = fastPoll }
+	if (shortPoll == null) { state.pollInterval = 0 }
+    else { state.pollInterval = shortPoll }
 	updateDataValue("driverVersion", driverVer())
 
 	refresh()
+}
+
+def setDeviceName(response) {
+	def cmdResponse = parseInput(response)
+	logDebug("setDeviceData: ${cmdResponse}")
+	device.setName(cmdResponse.device.type)
+	logInfo("setDeviceData: Device Name updated to ${cmdResponse.device.type}")
 }
 
 
@@ -94,38 +103,30 @@ def on() {
 	logDebug("on")
 	sendGetCmd("/s/1", "commandParse")
 }
+
 def off() {
 	logDebug("off")
 	sendGetCmd("/s/0", "commandParse")
 }
-def ping() {
-	logDebug("ping")
-    refresh()
-}
+
+def ping() { refresh() }
+
 def refresh() {
 	logDebug("refresh")
 	sendGetCmd("/api/relay/state", "commandParse")
 }
-def quickPoll() { sendGetCmd("/api/relay/state", "commandParse") }
+
 def commandParse(response) {
-	if(response.status != 200 || response.body == null) {
-		logWarn("parseInput: Command generated an error return: ${response.status} / ${response.body}")
-		return
-	}
-	def jsonSlurper = new groovy.json.JsonSlurper()
-	def cmdResponse = jsonSlurper.parseText(response.body)
+	def cmdResponse = parseInput(response)
 	logDebug("commandParse: cmdResponse = ${cmdResponse}")
-    
-	def relayState
-	relayState = cmdResponse.relays[0].state
-	
+
 	def onOff = "off"
-	if (relayState == 1) { onOff = "on" }
-	sendEvent(name: "switch", value: onOff)
-	logInfo("cmdResponse: switch = ${onOff}")
-	if (state.pollInterval != "0") {
-		runIn(state.pollInterval.toInteger(), quickPoll)
+	if (cmdResponse[0].state == 1) { onOff = "on" }
+	if (onOff != device.currentValue("switch")) {
+		sendEvent(name: "switch", value: onOff)
+		logInfo("cmdResponse: switch = ${onOff}")
 	}
+	if (state.pollInterval > 0) { runIn(state.pollInterval, refresh) }
 }
 
 
@@ -148,6 +149,14 @@ private sendPostCmd(command, body, action){
 						  Host: "${getDataValue("deviceIP")}:80"
 					  ]]
 	sendHubCommand(new physicalgraph.device.HubAction(parameters, null, [callback: action]))
+}
+def parseInput(response) {
+	try {
+		def jsonSlurper = new groovy.json.JsonSlurper()
+		return jsonSlurper.parseText(response.body)
+	} catch (error) {
+		logWarn "CommsError: ${error}."
+	}
 }
 
 

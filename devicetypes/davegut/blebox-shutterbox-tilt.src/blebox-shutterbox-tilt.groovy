@@ -14,10 +14,9 @@ open API documentation for development and is intended for integration into Smar
 
 ===== Hiatory =====
 08.22.19	1.0.01	Initial release.
-07.31.21	2.0.0	Update to latest API Version
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "2.0.0" }
+def driverVer() { return "1.0.01" }
 metadata {
 	definition (name: "bleBox shutterBox Tilt",
 				namespace: "davegut",
@@ -93,8 +92,6 @@ def installed() {
 def updated() {
 	logInfo("Updating...")
 	unschedule()
-    log.warning "THIS INTEGRATION IS DEPENDENTENT ON THE SMART THINGS IDE WHICH WILL BE DISABLED IN THE NEAR FUTURE.  THERE IS NO PLAN TO UPGRADE THIS INTEGRATION TO THE NEW NETHODOLOGY."
-    state.notice = "THIS INTEGRATION IS DEPENDENTENT ON THE SMART THINGS IDE WHICH WILL BE DISABLED IN THE NEAR FUTURE.  THERE IS NO PLAN TO UPGRADE THIS INTEGRATION TO THE NEW NETHODOLOGY."
 	
 	if (!getDataValue("applicationVersion")) {
 		if (!device_IP) {

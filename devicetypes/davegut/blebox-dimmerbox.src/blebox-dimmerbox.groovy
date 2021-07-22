@@ -13,17 +13,20 @@ DISCLAIMER: The author of this integration is not associated with blebox.  This 
 open API documentation for development and is intended for integration into SmartThings.
 
 ===== Hiatory =====
-08.22.19	1.0.01	Initial release.
+08.22.19	1.0.02	Initial release.
+10.10.10	1.1.01	Combined drivers and updated to match other platform.
+					Note:  If device is non-dimming, the level command is ignored with a debug message.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.0.01" }
+def driverVer() { return "1.1.01" }
 metadata {
-	definition (name: "bleBox dimmerBox NoDim",
+	definition (name: "bleBox dimmerBox",
 				namespace: "davegut",
 				author: "Dave Gutheinz",
                 ocfDeviceType: "oic.d.light") {
 		capability "Light"
         capability "Switch"
+		capability "Switch Level"
 		capability "Actuator"
 		capability "Refresh"
         capability "Health Check"
@@ -36,6 +39,10 @@ metadata {
 				attributeState "off", label:'${name}', action: "switch.on",
                 	icon: "st.Lighting.light13", backgroundColor: "#ffffff", nextState: "on"
 			}
+			tileAttribute ("device.level", key: "SLIDER_CONTROL") {
+				attributeState "level", label: "Brightness: ${currentValue}", 
+                	action: "switch level.setLevel"
+			}
 		}
 		standardTile("refresh", "capability.refresh", width: 2, height: 2, decoration: "flat") {
 			state "default", label: "Refresh", action: "refresh.refresh"
@@ -45,22 +52,25 @@ metadata {
 		details("switch", "blankTile", "refresh")
 	}
 	preferences {
-		input ("device_IP", "text", title: "Manual Install Device IP")
-		input ("transTime", "number", title: "Default Transition time (0 - 60 seconds maximum)",
+		input ("device_IP", "text", title: "Device IP")
+		input ("transTime", "num", title: "Default Transition time (0 - 60 seconds maximum)",
 			   defaultValue: 1)
 		input ("refreshInterval", "enum", title: "Device Refresh Interval (minutes)",
-			   options: ["1", "5", "15", "30"])
-		input ("fastPoll", "enum",title: "Enable fast polling", 
-			   options: ["No", "1", "2", "3", "4", "5", "10", "15"])
-		input ("debug", "bool", title: "Enable debug logging")
-		input ("descriptionText", "bool", title: "Enable description text logging")
+			   options: ["1", "5", "15", "30"], defaultValue: "30")
+		input ("shortPoll", "number",title: "Fast Polling Interval ('0' = DISABLED)",
+			   defaultValue: 0)
+		input ("debug", "bool", title: "Enable debug logging", defaultValue: false)
+		input ("descriptionText", "bool", title: "Enable description text logging", defaultValue: true)
 	}
 }
+
 def installed() {
 	logInfo("Installing...")
 	sendEvent(name: "DeviceWatch-Enroll",value: "{\"protocol\": \"LAN\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${device.hub.hardwareID}\"}", displayed: false)
+	state.savedLevel = 255
 	runIn(2, updated)
 }
+
 def updated() {
 	logInfo("Updating...")
 	unschedule()
@@ -72,22 +82,51 @@ def updated() {
 		}
 		updateDataValue("deviceIP", device_IP)
 		logInfo("Device IP set to ${getDataValue("deviceIP")}")
+		//	Update device name on manual installation to standard name
+		sendGetCmd("/api/device/state", "setDeviceName")
 	}
 
-	switch(refreshInterval) {
+	if (!getDataValue("mode")) {
+		sendGetCmd("/api/dimmer/state", "setDimmerMode")
+	}
+
+	if (refreshInterval == null) { refreshInterval = 30 }
+    switch(refreshInterval) {
 		case "1" : runEvery1Minute(refresh); break
 		case "5" : runEvery5Minutes(refresh); break
 		case "15" : runEvery15Minutes(refresh); break
 		default: runEvery30Minutes(refresh)
 	}
-
-	if (!fastPoll || fastPoll =="No") { state.pollInterval = "0" }
-	else { state.pollInterval = fastPoll }
-	if (!transTime) { state.defFadeSpeed = getFadeSpeed("1") }
-    else { state.defFadeSpeed = getFadeSpeed(transTime) }
+	if (shortPoll == null) { device.updateSetting("shortPoll",[type:"number", value:0]) }
+	state.errorCount = 0
+	state.defFadeSpeed = getFadeSpeed(transTime)
 	updateDataValue("driverVersion", driverVer())
 
-	refresh()
+	logInfo("fastPoll interval set to ${shortPoll}")
+	logInfo("Default Fade Speed set to ${state.defFadeSpeed} seconds")
+	logInfo("Debug logging is: ${debug}.")
+	logInfo("Description text logging is ${descriptionText}.")
+	logInfo("Refresh interval set for every ${refreshInterval} minute(s).")
+
+	runIn(2, refresh)
+}
+
+def setDeviceName(response) {
+	def cmdResponse = parseInput(response)
+	logDebug("setDeviceData: ${cmdResponse}")
+	device.setName(cmdResponse.device.type)
+	logInfo("setDeviceData: Device Name updated to ${cmdResponse.device.type}")
+}
+
+def setDimmerMode(response) {
+	def cmdResponse = parseInput(response)
+	logDebug("setDimmerMode: ${cmdResponse}")
+	def mode = "dimmable"
+	if (cmdResponse.dimmer.loadType == "2") {
+		mode = "undimmable"
+		sendEvent(name: "level", value: null)
+	}
+	updateDataValue("mode", mode)
 }
 
 
@@ -95,18 +134,35 @@ def updated() {
 def on() {
 	logDebug("on")
 	sendPostCmd("/api/dimmer/set",
-				"""{"dimmer":{"desiredBrightness":255,"fadeSpeed":${state.defFadeSpeed}}}""",
+				"""{"dimmer":{"desiredBrightness":${state.savedLevel},"fadeSpeed":${state.defFadeSpeed}}}""",
 				"commandParse")
 }
+
 def off() {
 	logDebug("off")
 	sendPostCmd("/api/dimmer/set",
 				"""{"dimmer":{"desiredBrightness":0,"fadeSpeed":${state.defFadeSpeed}}}""",
 				"commandParse")
 }
+
+def setLevel(level, transitionTime = null) {
+	if (getDataValue("mode") != "dimmable") {
+		logDebug("setLevel: Level ignored on non-dimming device")
+		return
+	}
+	def fadeSpeed = state.defFadeSpeed
+	if (transitionTime != null) { fadeSpeed = getFadeSpeed(transitionTime) }
+	logDebug("setLevel: level = ${level} // ${fadeSpeed}")
+	level = (2.55 * level + 0.5).toInteger()
+	state.savedLevel = level
+	sendPostCmd("/api/dimmer/set",
+				"""{"dimmer":{"desiredBrightness":${level},"fadeSpeed":${fadeSpeed}}}""",
+				"commandParse")
+}
+
 def getFadeSpeed(transitionTime) {
 	logDebug("getFadeSpeed: ${transitionTime}")
-	def timeIndex = (10 * transitionTime).toInteger()
+	def timeIndex = (10* transitionTime.toFloat()).toInteger()
 	def fadeSpeed
 	switch (timeIndex) {
 		case 0: fadeSpeed = 255; break
@@ -129,30 +185,32 @@ def getFadeSpeed(transitionTime) {
 	}
 	return fadeSpeed
 }
+
 def ping() {
 	logDebug("ping")
     refresh()
 }
+
 def refresh() {
 	logDebug("refresh")
 	sendGetCmd("/api/dimmer/state", "commandParse")
 }
-def quickPoll() { sendGetCmd("/api/dimmer/state", "commandParse") }
-def commandParse(response) {
-	if(response.status != 200 || response.body == null) {
-		logWarn("parseInput: Command generated an error return: ${response.status} / ${response.body}")
-		return
-	}
-	def jsonSlurper = new groovy.json.JsonSlurper()
-	def cmdResponse = jsonSlurper.parseText(response.body)
 
+def commandParse(response) {
+	def cmdResponse = parseInput(response)
 	logDebug("commandParse: response = ${cmdResponse}")
+
+	def level = cmdResponse.dimmer.desiredBrightness
+	level = (0.5 + level/ 2.55).toInteger()
 	def onOff = "off"
-	if (cmdResponse.dimmer.desiredBrightness > 0) { onOff = "on" }
+	if (level > 0) { onOff = "on" }
 	sendEvent(name: "switch", value: onOff)
-	logInfo("commandParse: switch = ${onOff}.")
-	if (state.pollInterval != "0") {
-		runIn(state.pollInterval.toInteger(), quickPoll)
+	if (getDataValue("mode") == "dimmable") {
+		sendEvent(name: "level", value: level)
+	}
+	logInfo "commandParse: switch = ${onOff}, level = ${level}"
+	if (shortPoll != "0") {
+		runIn(shortPoll, quickPoll)
 	}
 }
 
@@ -176,6 +234,14 @@ private sendPostCmd(command, body, action){
 						  Host: "${getDataValue("deviceIP")}:80"
 					  ]]
 	sendHubCommand(new physicalgraph.device.HubAction(parameters, null, [callback: action]))
+}
+def parseInput(response) {
+	try {
+		def jsonSlurper = new groovy.json.JsonSlurper()
+		return jsonSlurper.parseText(response.body)
+	} catch (error) {
+		logWarn "CommsError: ${error}."
+	}
 }
 
 
