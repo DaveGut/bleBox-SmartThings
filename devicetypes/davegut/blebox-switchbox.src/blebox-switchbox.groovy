@@ -17,7 +17,7 @@ open API documentation for development and is intended for integration into Smar
 10.10.10	1.1.01	Updates to match other platform.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.1.01" }
+def driverVer() { return "1.3.02" }
 
 metadata {
 	definition (name: "bleBox switchBox",
@@ -121,7 +121,7 @@ def commandParse(response) {
 	logDebug("commandParse: cmdResponse = ${cmdResponse}")
 
 	def onOff = "off"
-	if (cmdResponse[0].state == 1) { onOff = "on" }
+	if (cmdResponse.relays[0].state == 1) { onOff = "on" }
 	if (onOff != device.currentValue("switch")) {
 		sendEvent(name: "switch", value: onOff)
 		logInfo("cmdResponse: switch = ${onOff}")
