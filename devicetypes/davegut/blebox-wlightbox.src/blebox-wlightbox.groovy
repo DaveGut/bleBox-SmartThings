@@ -16,9 +16,10 @@ open API documentation for development and is intended for integration into the 
 09.20.19	1.2.01.	Initial Parent - Child driver release.
 					Added link to Application that will check/update IPs if the communications fail.
 10.01.19	1.3.01. Updated error handling.
+07.23.21	1.3.02	No Change.  Update version to sync with child.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.3.01" }
+def driverVer() { return "1.3.02" }
 
 metadata {
 	definition (name: "bleBox wLightBox",
