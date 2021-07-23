@@ -16,9 +16,10 @@ open API documentation for development and is intended for integration into the 
 09.20.19	1.2.01.	Initial Parent - Child driver release.
 					Added link to Application that will check/update IPs if the communications fail.
 10.01.19	1.3.01. Updated error handling.
+07.23.2021	1.3.02.	Attempt to get working with IDE updates affecting Child drivers.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.3.01" }
+def driverVer() { return "1.3.02" }
 
 metadata {
 	definition (name: "bleBox wLightBox Rgbw",
@@ -31,7 +32,6 @@ metadata {
 		capability "Switch Level"
 		capability "Color Control"
 		capability "Health Check"
-        capability "Refresh"
         command "setRed", ["NUMBER"]
         attribute "red", "string"
         command "setGreen", ["NUMBER"]
@@ -87,15 +87,11 @@ metadata {
         	inactiveLabel: false, range: "(0..270)") {
 			state "default", action: "setWhite"
 		}
-		standardTile("refresh", "capability.refresh", width: 2, height: 2, decoration: "flat") {
-			state "default", label: "Refresh", action: "refresh.refresh"
-		}
 		main("switch")
 		details("switch",
         		"redLabel", "greenLabel", "blueLabel",
                 "setRed", "setGreen", "setBlue",
-                "whiteLabel", "2x1", "refresh",
-                "setWhite")
+                "whiteLabel", "2x1", "setWhite")
 	}
 	preferences {
 		input ("fadeSpeed", "number", title: "Default Transition time (0 - 60 seconds)")
@@ -114,52 +110,55 @@ def installed() {
 def updated() {
 	logInfo("Updating...")
 	unschedule()
-    if (fadeSpeed) { state.defTransTime = 1000 * fadeSpeed }
-    else { state.defTransTime = 1000 }
-    state.transTime = state.defTransTime
+    //	Fade speed fix
+    def defFadeSpeed = 1000
+    if (fadeSpeed) { defTransTime = 1000 * fadeSpeed }
+    state.transTime = defTransTime
+	state.defTransTime = defTransTime
 	updateDataValue("driverVersion", driverVer())
+    if (!debug) { debug = true }
+    if (!descriptionText) { descriptionText = true }
 	logInfo("Debug logging is: ${debug}.")
 	logInfo("Description text logging is ${descriptionText}.")
-	refresh()
 }
 
 //	===== Commands and Parse Returns =====
 def on() {
-	logDebug("on: ${state.savedLevel}")
-	parent.childCommand(getDataValue("channel"), state.savedRgbw, state.transTime)
+	logDebug("on: ${state.savedRgbw}")
+	parent.childCommand("rgbw", state.savedRgbw, state.transTime)
 }
 
 def off() {
 	logDebug("off")
-	parent.childCommand(getDataValue("channel"), "00000000", state.transTime)
+	parent.childCommand("rgbw", "00000000", state.transTime)
 }
 
 def setRed(red) {
 	logDebug("setRed: ${red})")
 	red = Integer.toHexString(red).padLeft(2, '0')
     def rgbw = red + state.savedRgbw[2..7]
-	parent.childCommand(getDataValue("channel"), rgbw, state.transTime)
+	parent.childCommand("rgbw", rgbw, state.transTime)
 }
 
 def setGreen(green) {
 	logDebug("setGreen: ${green})")
 	green = Integer.toHexString(green).padLeft(2, '0')
     def rgbw = state.savedRgbw[0..1] + green + state.savedRgbw[4..7]
-	parent.childCommand(getDataValue("channel"), rgbw, state.transTime)
+	parent.childCommand("rgbw", rgbw, state.transTime)
 }
 
 def setBlue(blue) {
 	logDebug("setBlue: ${blue})")
 	blue = Integer.toHexString(blue).padLeft(2, '0')
     def rgbw = state.savedRgbw[0..3] + blue + state.savedRgbw[6..7]
-	parent.childCommand(getDataValue("channel"), rgbw, state.transTime)
+	parent.childCommand("rgbw", rgbw, state.transTime)
 }
 
 def setWhite(white) {
 	logDebug("setWhite: ${white})")
 	white = Integer.toHexString(white).padLeft(2, '0')
     def rgbw = state.savedRgbw[0..5] + white
-	parent.childCommand(getDataValue("channel"), rgbw, state.transTime)
+	parent.childCommand("rgbw", rgbw, state.transTime)
 }
 
 def setLevel(level, fadeSpeed = state.transTime) {
@@ -196,15 +195,8 @@ def setColor(color) {
 	def saturation = (0.5 + color.saturation).toInteger()
 	def rgb = colorUtil.hsvToHex(hue, saturation, level).substring(1,7).toLowerCase()
     def rgbw = rgb + state.savedRgbw[6..7]
-	parent.childCommand(getDataValue("channel"), rgbw, state.transTime)
+	parent.childCommand("rgbw", rgbw, state.transTime)
     state.transTime = state.defTransTime
-}
-
-def ping() { refresh() }
-
-def refresh() {
-	logDebug("refresh.")
-	parent.refresh()
 }
 
 def parseReturnData(hexDesired) {
