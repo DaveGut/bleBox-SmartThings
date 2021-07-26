@@ -121,7 +121,7 @@ def off() {
 
 def setLevel(level, transTime = state.defFadeSpeed) {
     if (transTime == null) {  transTime = 1 }
-	logDebug("setLevel: level = ${level}), hue = ${state.hue}, saturation = ${state.saturation}")
+	logDebug("setLevel: level = ${level}, hue = ${state.hue}, saturation = ${state.saturation}")
     if (level == 0) {
     	setRgbw("00000000", transTime)
     } else {
