@@ -16,7 +16,7 @@ open API documentation for development and is intended for integration into the 
 07.31.21	Special combined RBWB single driver version.
 */
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.3.01" }
+def driverVer() { return "1.3.02" }
 
 metadata {
 	definition (name: "bleBox wLightBox",
@@ -93,15 +93,11 @@ def updated() {
 	}
 	logInfo("Refresh interval set for every ${refreshInterval} minute(s).")
 
-	def defFadeSpeed = 1
-    if (!fadeSpeed) { fadeSpeed = defFadeSpeed }
-    state.transTime = defFadeSpeed
-    logInfo("state.transTime set to ${defFadeSpeed}")
-    if (!debug) { debug = true }
-	logInfo("Debug logging is: ${debug}.")
-    if (!descriptionText) { descriptionText = true }
-	logInfo("Description text logging is ${descriptionText}.")
-    
+    if (fadeSpeed) {
+    	state.defFadeSpeed = fadeSpeed.toInteger()
+    } else {
+    	state.defFadeSpeed = 1
+    }
 	runIn(2, refresh)
 }
 
@@ -115,7 +111,7 @@ def setDeviceName(response) {
 //	===== Commands and Parse Returns =====
 def on() {
 	logDebug("on")
-	setRgbw(state.savedLevel)
+	setRgbw(state.savedRgbw)
 }
 
 def off() {
@@ -123,9 +119,9 @@ def off() {
 	setRgbw("00000000")
 }
 
-def setLevel(level, fadeSpeed = state.transTime) {
+def setLevel(level, transTime = state.defFadeSpeed) {
+    if (transTime == null) {  transTime = 1 }
 	logDebug("setLevel: level = ${level}), hue = ${state.hue}, saturation = ${state.saturation}")
-    def transTime = 1000* fadeSpeed
     if (level == 0) {
     	setRgbw("00000000", transTime)
     } else {
@@ -138,12 +134,13 @@ def setLevel(level, fadeSpeed = state.transTime) {
     logInfo("setLevel: level set to ${level}")
 }
 
-def setRgbw(rgbw, transTime = state.transTime) {
+def setRgbw(rgbw, transTime = state.defFadeSpeed) {
 	//	Common method to send new rgbw to device.
+    if (transTime == null) { transTime = 1 }
 	logDebug("setRgbw: ${rgbw} / ${transTime}")
-	def fadeSpeed = 1000 * transTime.toInteger()
+	transTime = 1000 * transTime.toInteger()
 	sendPostCmd("/api/rgbw/set",
-				"""{"rgbw":{"desiredColor":"${rgbw}","durationsMs":{"colorFade":${fadeSpeed}}}}""",
+				"""{"rgbw":{"desiredColor":"${rgbw}","durationsMs":{"colorFade":${transTime}}}}""",
 				"commandParse")
 }
 
